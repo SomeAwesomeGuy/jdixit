@@ -12,6 +12,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 
 import javax.swing.BorderFactory;
@@ -36,22 +37,24 @@ public class DixitServer {
 	
 	private ServerSocket _serverSocket;
 	
-	private HashSet<Player> _playerSet;
+	private HashMap<String, Player> _playerMap;
 	private ArrayList<Player> _playerList;
+	private int _playersLeft;
 	
-	private ChatLog _chatLog;
-	
-	private Message.Status _status;
 	private Message _gameState;
 	
+	private int _storyTeller;
+	private int _storyCard;
+	
 	public DixitServer() {
-		_playerSet = new HashSet<Player>();
+		_playerMap = new HashMap<String, Player>();
 		_playerList = new ArrayList<Player>();
-		_chatLog = new ChatLog();
 		_gameState = new Message(Type.UPDATE);
+		_storyTeller = 0;
+		_storyCard = -1;
 
-		setStatus(Status.LOBBY);
-		_gameState.setChatLog(_chatLog);
+		_gameState.setStatus(Status.LOBBY);
+		_gameState.setChatLog(new ChatLog());
 		
 		try {
 			_infoWindow = new InfoWindow(InetAddress.getLocalHost().getHostAddress());
@@ -66,18 +69,12 @@ public class DixitServer {
 		}
 	}
 	
-	private void setStatus(Status status) {
-		_status = status;
-		_gameState.setStatus(status);
-		_gameState.setChange();
-	}
-	
 	private synchronized boolean registerPlayer(String name, ClientConnection connection) {
-		final Player player = new Player(name);
-		if(_playerSet.contains(player)) {
+		if(_playerMap.containsKey(name)) {
 			return false;
 		}
-		_playerSet.add(player);
+		final Player player = new Player(name);
+		_playerMap.put(name, player);
 		_playerList.add(player);
 		_infoWindow.refreshPlayerPanel();
 		System.out.println("Player " + name + " has joined the game");
@@ -85,13 +82,74 @@ public class DixitServer {
 	}
 	
 	private void startGame() {
-		setStatus(Status.AWAITING_STORY);
-		System.out.println("Starting game");
+		ArrayList<String> players = new ArrayList<String>();
+		for(Player p : _playerList) {
+			players.add(p.getName());
+		}
+		_gameState.setPlayers(players);
+		startTurn();
+	}
+	
+	private void startTurn() {
+		_gameState.setStatus(Status.AWAITING_STORY);
+		_gameState.setPlayer(_playerList.get(_storyTeller).getName());
+		_gameState.setMessage(null);
+		_gameState.setCard(-1);
+		_gameState.setChange();
+		_playersLeft = _playerMap.size();
+		for(Player p : _playerList) {
+			p.turnReset();
+		}
 	}
 	
 	private void addChat(Message message) {
-		_chatLog.addChat(message.getPlayer(), message.getMessage());
+		_gameState.getChatLog().addChat(message.getPlayer(), message.getMessage());
 		_gameState.setChange();
+	}
+	
+	private void setStory(Message message) {
+		_gameState.setMessage(message.getMessage());
+		_gameState.setStatus(Status.CARD_SUBMISSION);
+		_storyCard = message.getCard();
+		_gameState.setChange();
+	}
+	
+	private void acceptSubmission(Message message) {
+		final Player player = _playerMap.get(message.getPlayer());
+		if(player.getSubmittedCard() == -1) {
+			_playersLeft--;
+		}
+		player.setSubmittedCard(message.getCard());
+		
+		if(_playersLeft == 0) {
+			_gameState.setStatus(Status.CARD_VOTE);
+			_gameState.setChange();
+			_playersLeft = _playerMap.size();
+			//TODO: gather submitted cards
+		}
+	}
+	
+	private boolean acceptVote(Message message) {
+		final Player player = _playerMap.get(message.getPlayer());
+		if(message.getCard() == player.getSubmittedCard()) {
+			return false;
+		}
+		if(player.getVotedCard() == -1) {
+			_playersLeft--;
+		}
+		player.setVotedCard(message.getCard());
+		
+		if(_playersLeft == 0) {
+			_storyTeller++;
+			_storyTeller %= _playerMap.size(); //wrap around
+			// TODO: calculate score
+			startTurn();
+		}
+		return true;
+	}
+	
+	private void score() {
+		
 	}
 	
 	private Message getUpdate(long latestMessageID) {
@@ -116,7 +174,7 @@ public class DixitServer {
 				final Type type = message.getType();
 				if(type == Type.REGISTER) {
 					final Message returnMessage = new Message(Type.FAIL);
-					if(_status != Status.LOBBY) {
+					if(_gameState.getStatus() != Status.LOBBY) {
 						returnMessage.setMessage("The game has already started");
 					}
 					else {
@@ -138,6 +196,22 @@ public class DixitServer {
 					objectOut.writeObject(getUpdate(message.getMessageID()));
 					objectOut.flush();
 				}
+				else if(type == Type.STORY) {
+					if(_gameState.getStatus() == Status.AWAITING_STORY && message.getPlayer().equals(_playerList.get(_storyTeller))) {
+						setStory(message);
+					}
+				}
+				else if(type == Type.SUBMIT) {
+					if(_gameState.getStatus() == Status.CARD_SUBMISSION && !message.getPlayer().equals(_playerList.get(_storyTeller))) {
+						acceptSubmission(message);
+					}
+				}
+				else if(type == Type.VOTE) {
+					if(_gameState.getStatus() == Status.CARD_VOTE && !message.getPlayer().equals(_playerList.get(_storyTeller))) {
+						acceptSubmission(message);
+					}
+				}
+				
 				
 				objectIn.close();
 				objectOut.close();
@@ -224,7 +298,7 @@ public class DixitServer {
 			}
 			_playerPanel.revalidate();
 			pack();
-			if(_playerSet.size() >= MIN_PLAYERS) {
+			if(_playerMap.size() >= MIN_PLAYERS) {
 				_startButton.setEnabled(true);
 			}
 		}

@@ -1,6 +1,7 @@
 package message;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 public class Message implements Serializable {
@@ -10,6 +11,8 @@ public class Message implements Serializable {
 		FAIL,
 		CHAT,
 		STORY,
+		SUBMIT,
+		VOTE,
 		REGISTER,
 		PIC,
 		UPDATE,
@@ -20,7 +23,7 @@ public class Message implements Serializable {
 		LOBBY ("Waiting for game to start"),
 		AWAITING_STORY ("is thinking of a story"),
 		CARD_SUBMISSION ("Pick a card from your hand"),
-		CARD_CHOOSE ("Choose the storyteller's card");
+		CARD_VOTE("Choose the storyteller's card");
 		
 		private String _statusMessage;
 		private Status(String message) {
@@ -34,6 +37,8 @@ public class Message implements Serializable {
 	private long _messageID;
 	
 	private HashMap<String,Integer> _scores;
+	
+	private ArrayList<String> _players;
 	
 	private ChatLog _chatLog;
 	
@@ -69,6 +74,14 @@ public class Message implements Serializable {
 
 	public void setScores(HashMap<String, Integer> scores) {
 		_scores = scores;
+	}
+	
+	public ArrayList<String> getPlayers() {
+		return _players;
+	}
+	
+	public void setPlayers(ArrayList<String> players) {
+		_players = players;
 	}
 	
 	public ChatLog getChatLog() {

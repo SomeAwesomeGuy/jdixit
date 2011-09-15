@@ -69,6 +69,7 @@ public class GameWindow extends JFrame {
 		setTitle("JDixit");
 		setLocationRelativeTo(null);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setResizable(false);
 		setVisible(true);
 	}
 	
@@ -110,7 +111,7 @@ public class GameWindow extends JFrame {
 	}
 	
 	public void updateChat(ChatLog log) {
-		ArrayList<Chat> chatList = log.getLatestChats(_latestChatID);
+		final ArrayList<Chat> chatList = log.getLatestChats(_latestChatID);
 		if(chatList != null) {
 			for(Chat c : chatList) {
 				_textArea.append(c.toString() + "\n");

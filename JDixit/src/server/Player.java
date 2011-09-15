@@ -5,7 +5,7 @@ import java.util.HashSet;
 public class Player {
 	
 	private String _name;
-	private int _score;
+	private int _score, _submittedCard, _votedCard;
 	private HashSet<Integer> _hand;
 	
 	public Player(String name) {
@@ -14,8 +14,9 @@ public class Player {
 		_hand = new HashSet<Integer>();
 	}
 	
-	public void sendMessage(String message) {
-		
+	public void turnReset() {
+		_submittedCard = -1;
+		_votedCard = -1;
 	}
 	
 	public String getName() {
@@ -24,6 +25,22 @@ public class Player {
 	
 	public int getScore() {
 		return _score;
+	}
+	
+	public int getSubmittedCard() {
+		return _submittedCard;
+	}
+	
+	public void setSubmittedCard(int card) {
+		_votedCard = card;
+	}
+	
+	public int getVotedCard() {
+		return _votedCard;
+	}
+	
+	public void setVotedCard(int card) {
+		_submittedCard = card;
 	}
 	
 	public boolean isInHand(int card) {
