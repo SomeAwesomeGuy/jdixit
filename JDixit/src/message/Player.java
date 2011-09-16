@@ -1,4 +1,4 @@
-package server;
+package message;
 
 import java.util.HashSet;
 
@@ -70,5 +70,14 @@ public class Player {
 	@Override
 	public int hashCode() {
 		return _name.hashCode();
+	}
+	
+	@Override
+	public Object clone() {
+		final Player clone = new Player(_name);
+		clone.addScore(_score);
+		clone.setSubmittedCard(_submittedCard);
+		clone.setVotedCard(_votedCard);
+		return clone;
 	}
 }

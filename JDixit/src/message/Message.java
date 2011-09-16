@@ -2,7 +2,6 @@ package message;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashMap;
 
 public class Message implements Serializable {
 	private static final long serialVersionUID = -8006817488241702192L;
@@ -36,9 +35,7 @@ public class Message implements Serializable {
 	
 	private long _messageID;
 	
-	private HashMap<String,Integer> _scores;
-	
-	private ArrayList<String> _players;
+	private ArrayList<Player> _players;
 	
 	private ChatLog _chatLog;
 	
@@ -57,7 +54,6 @@ public class Message implements Serializable {
 	}
 	
 	public void clear() {
-		_scores = null;
 		_message = null;
 		_player = null;
 		_type = null;
@@ -67,20 +63,12 @@ public class Message implements Serializable {
 	public void setChange() {
 		_messageID++;
 	}
-
-	public HashMap<String, Integer> getScores() {
-		return _scores;
-	}
-
-	public void setScores(HashMap<String, Integer> scores) {
-		_scores = scores;
-	}
 	
-	public ArrayList<String> getPlayers() {
+	public ArrayList<Player> getPlayers() {
 		return _players;
 	}
 	
-	public void setPlayers(ArrayList<String> players) {
+	public void setPlayers(ArrayList<Player> players) {
 		_players = players;
 	}
 	

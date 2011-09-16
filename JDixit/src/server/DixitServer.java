@@ -23,6 +23,7 @@ import javax.swing.JPanel;
 
 import message.ChatLog;
 import message.Message;
+import message.Player;
 import message.Message.Status;
 import message.Message.Type;
 
@@ -81,22 +82,27 @@ public class DixitServer {
 		return true;
 	}
 	
-	private void startGame() {
-		ArrayList<String> players = new ArrayList<String>();
+	private void transferPlayers() {
+		ArrayList<Player> players = new ArrayList<Player>();
 		for(Player p : _playerList) {
-			players.add(p.getName());
+			players.add((Player)p.clone());
 		}
 		_gameState.setPlayers(players);
+	}
+	
+	private void startGame() { //TODO: may not need this
+		
 		startTurn();
 	}
 	
 	private void startTurn() {
+		transferPlayers();
 		_gameState.setStatus(Status.AWAITING_STORY);
 		_gameState.setPlayer(_playerList.get(_storyTeller).getName());
 		_gameState.setMessage(null);
 		_gameState.setCard(-1);
 		_gameState.setChange();
-		_playersLeft = _playerMap.size();
+		_playersLeft = _playerList.size();
 		for(Player p : _playerList) {
 			p.turnReset();
 		}
@@ -142,14 +148,59 @@ public class DixitServer {
 		if(_playersLeft == 0) {
 			_storyTeller++;
 			_storyTeller %= _playerMap.size(); //wrap around
-			// TODO: calculate score
+			score();
 			startTurn();
 		}
 		return true;
 	}
 	
 	private void score() {
+		HashMap<Integer, Player> cardMap = new HashMap<Integer, Player>();
+		for(Player p : _playerList) {
+			cardMap.put(p.getSubmittedCard(), p);
+		}
 		
+		int storyVoteCount = 0;
+		for(int i = 0; i < _playerList.size(); i++) {
+			if(i == _storyTeller) {
+				continue;
+			}
+			final Player p = _playerList.get(i);
+			
+			int votedCard = p.getVotedCard();
+			if(votedCard == _storyCard) {
+				storyVoteCount++;
+			}
+		}
+		
+		if(storyVoteCount == 0 || storyVoteCount == _playerList.size() - 1) {
+			for(int i = 0; i < _playerList.size(); i++) {
+				if(i == _storyTeller) {
+					continue;
+				}
+				final Player p = _playerList.get(i);
+				
+				p.addScore(2);
+			}
+		}
+		else {
+			_playerList.get(_storyTeller).addScore(3);
+			for(int i = 0; i < _playerList.size(); i++) {
+				if(i == _storyTeller) {
+					continue;
+				}
+				final Player p = _playerList.get(i);
+				
+				int votedCard = p.getVotedCard();
+				if(votedCard == _storyCard) {
+					p.addScore(3);
+					storyVoteCount++;
+				}
+				else {
+					cardMap.get(p.getVotedCard()).addScore(1);
+				}
+			}
+		}
 	}
 	
 	private Message getUpdate(long latestMessageID) {
@@ -208,7 +259,7 @@ public class DixitServer {
 				}
 				else if(type == Type.VOTE) {
 					if(_gameState.getStatus() == Status.CARD_VOTE && !message.getPlayer().equals(_playerList.get(_storyTeller))) {
-						acceptSubmission(message);
+						acceptVote(message);
 					}
 				}
 				
