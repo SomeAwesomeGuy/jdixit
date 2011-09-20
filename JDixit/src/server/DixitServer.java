@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -21,6 +22,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
+import message.Card;
 import message.ChatLog;
 import message.Message;
 import message.Player;
@@ -35,6 +37,7 @@ public class DixitServer {
 	private InfoWindow _infoWindow;
 	
 	private ClientHandler _clientHandler;
+	private CardHandler _cardHandler;
 	
 	private ServerSocket _serverSocket;
 	
@@ -45,17 +48,24 @@ public class DixitServer {
 	private Message _gameState;
 	
 	private int _storyTeller;
-	private int _storyCard;
+	private Card _storyCard;
 	
 	public DixitServer() {
 		_playerMap = new HashMap<String, Player>();
 		_playerList = new ArrayList<Player>();
 		_gameState = new Message(Type.UPDATE);
 		_storyTeller = 0;
-		_storyCard = -1;
+		_storyCard = null;
 
 		_gameState.setStatus(Status.LOBBY);
 		_gameState.setChatLog(new ChatLog());
+		
+		try {
+			_cardHandler = new CardHandler();
+		} catch (FileNotFoundException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
 		
 		try {
 			_infoWindow = new InfoWindow(InetAddress.getLocalHost().getHostAddress());
@@ -66,6 +76,7 @@ public class DixitServer {
 			_clientHandler.start();
 		} 
 		catch (IOException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -82,7 +93,7 @@ public class DixitServer {
 		return true;
 	}
 	
-	private void transferPlayers() {
+	private void transferPlayersToGamestate() {
 		ArrayList<Player> players = new ArrayList<Player>();
 		for(Player p : _playerList) {
 			players.add((Player)p.clone());
@@ -95,12 +106,26 @@ public class DixitServer {
 		startTurn();
 	}
 	
+	private void dealCards() {
+		if(_gameState.getStatus() == Status.LOBBY) {
+			for(Player p : _playerList) {
+				p.setHand(_cardHandler.dealHand());
+			}
+		}
+		else {
+			for(Player p : _playerList) {
+				p.addToHand(_cardHandler.deal());
+			}
+		}
+	}
+	
 	private void startTurn() {
-		transferPlayers();
+		dealCards();
+		transferPlayersToGamestate();
 		_gameState.setStatus(Status.AWAITING_STORY);
 		_gameState.setPlayer(_playerList.get(_storyTeller).getName());
 		_gameState.setMessage(null);
-		_gameState.setCard(-1);
+		_gameState.setCard(null);
 		_gameState.setChange();
 		_playersLeft = _playerList.size();
 		for(Player p : _playerList) {
@@ -117,12 +142,13 @@ public class DixitServer {
 		_gameState.setMessage(message.getMessage());
 		_gameState.setStatus(Status.CARD_SUBMISSION);
 		_storyCard = message.getCard();
+		_playerList.get(_storyTeller).removeFromHand(_storyCard);
 		_gameState.setChange();
 	}
 	
 	private void acceptSubmission(Message message) {
 		final Player player = _playerMap.get(message.getPlayer());
-		if(player.getSubmittedCard() == -1) {
+		if(player.getSubmittedCard() == null) {
 			_playersLeft--;
 		}
 		player.setSubmittedCard(message.getCard());
@@ -140,7 +166,7 @@ public class DixitServer {
 		if(message.getCard() == player.getSubmittedCard()) {
 			return false;
 		}
-		if(player.getVotedCard() == -1) {
+		if(player.getVotedCard() == null) {
 			_playersLeft--;
 		}
 		player.setVotedCard(message.getCard());
@@ -155,7 +181,7 @@ public class DixitServer {
 	}
 	
 	private void score() {
-		HashMap<Integer, Player> cardMap = new HashMap<Integer, Player>();
+		HashMap<Card, Player> cardMap = new HashMap<Card, Player>();
 		for(Player p : _playerList) {
 			cardMap.put(p.getSubmittedCard(), p);
 		}
@@ -167,8 +193,8 @@ public class DixitServer {
 			}
 			final Player p = _playerList.get(i);
 			
-			int votedCard = p.getVotedCard();
-			if(votedCard == _storyCard) {
+			Card votedCard = p.getVotedCard();
+			if(votedCard.equals(_storyCard)) {
 				storyVoteCount++;
 			}
 		}
@@ -191,8 +217,8 @@ public class DixitServer {
 				}
 				final Player p = _playerList.get(i);
 				
-				int votedCard = p.getVotedCard();
-				if(votedCard == _storyCard) {
+				Card votedCard = p.getVotedCard();
+				if(votedCard.equals(_storyCard)) {
 					p.addScore(3);
 					storyVoteCount++;
 				}
@@ -261,6 +287,9 @@ public class DixitServer {
 					if(_gameState.getStatus() == Status.CARD_VOTE && !message.getPlayer().equals(_playerList.get(_storyTeller))) {
 						acceptVote(message);
 					}
+				}
+				else if(type == Type.PIC) {
+					
 				}
 				
 				

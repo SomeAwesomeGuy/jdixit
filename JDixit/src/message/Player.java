@@ -5,18 +5,21 @@ import java.util.HashSet;
 public class Player {
 	
 	private String _name;
-	private int _score, _submittedCard, _votedCard;
-	private HashSet<Integer> _hand;
+	private int _score;
+	private Card _submittedCard, _votedCard, _mostRecent;
+	private HashSet<Card> _hand;
 	
 	public Player(String name) {
 		_name = name;
 		_score = 0;
-		_hand = new HashSet<Integer>();
+		_hand = null;
+		_mostRecent = null;
 	}
 	
 	public void turnReset() {
-		_submittedCard = -1;
-		_votedCard = -1;
+		_hand.remove(_submittedCard);
+		_submittedCard = null;
+		_votedCard = null;
 	}
 	
 	public String getName() {
@@ -27,23 +30,23 @@ public class Player {
 		return _score;
 	}
 	
-	public int getSubmittedCard() {
+	public Card getSubmittedCard() {
 		return _submittedCard;
 	}
 	
-	public void setSubmittedCard(int card) {
+	public void setSubmittedCard(Card card) {
 		_votedCard = card;
 	}
 	
-	public int getVotedCard() {
+	public Card getVotedCard() {
 		return _votedCard;
 	}
 	
-	public void setVotedCard(int card) {
+	public void setVotedCard(Card card) {
 		_submittedCard = card;
 	}
 	
-	public boolean isInHand(int card) {
+	public boolean isInHand(Card card) {
 		return _hand.contains(card);
 	}
 	
@@ -51,12 +54,21 @@ public class Player {
 		_score += points;
 	}
 	
-	public void addToHand(int card) {
+	public void addToHand(Card card) {
 		_hand.add(card);
+		_mostRecent = card;
 	}
 	
-	public void removeFromHand(int card) {
+	public void removeFromHand(Card card) {
 		_hand.remove(card);
+	}
+	
+	public void setHand(HashSet<Card> hand) {
+		_hand = hand;
+	}
+	
+	public Card getMostRecentCard() {
+		return _mostRecent;
 	}
 	
 	@Override
@@ -78,6 +90,12 @@ public class Player {
 		clone.addScore(_score);
 		clone.setSubmittedCard(_submittedCard);
 		clone.setVotedCard(_votedCard);
+		for(Card i : _hand) {
+			clone.addToHand(i);
+		}
+		
 		return clone;
 	}
+	
+	
 }

@@ -45,7 +45,7 @@ public class Message implements Serializable {
 	
 	private Status _status;
 	
-	private int _cardID;
+	private Card _card;
 	
 	public Message(Type type) {
 		clear();
@@ -57,7 +57,7 @@ public class Message implements Serializable {
 		_message = null;
 		_player = null;
 		_type = null;
-		_cardID = -1;
+		_card = null;
 	}
 	
 	public void setChange() {
@@ -112,12 +112,12 @@ public class Message implements Serializable {
 		_status = status;
 	}
 
-	public int getCard() {
-		return _cardID;
+	public Card getCard() {
+		return _card;
 	}
 
-	public void setCard(int card) {
-		_cardID = card;
+	public void setCard(Card card) {
+		_card = card;
 	}
 	
 	public void setMessageID(long id) {
