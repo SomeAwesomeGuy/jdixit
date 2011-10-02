@@ -3,7 +3,9 @@ package client;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.event.ActionEvent;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import javax.swing.AbstractAction;
 import javax.swing.InputMap;
@@ -17,6 +19,7 @@ import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
 
 import layout.TableLayout;
+import message.Card;
 import message.Chat;
 import message.ChatLog;
 import message.Message;
@@ -27,15 +30,18 @@ public class GameWindow extends JFrame {
 	private static final int CHAR_LIMIT = 5000;
 	private static final int CHAR_REMOVED = 1000;
 	
-	private ChatSender _chatSender;
 	private JTextArea _textArea;
 	
 	private int _latestChatID;
+	
+	private HashMap<Card,BufferedImage> _hand;
 
-	public GameWindow(ChatSender chatSender) {
+	private ArrayList<BufferedImage> _tableCards;
+
+	public GameWindow() {
 		super();
-		_chatSender = chatSender;
 		_latestChatID = -1;
+		_hand = new HashMap<Card,BufferedImage>();
 		
 		buildWindow();
 		
@@ -92,7 +98,7 @@ public class GameWindow extends JFrame {
 	        public void actionPerformed(ActionEvent e) {
 	        	final String text = typeArea.getText();
 				if(!text.equals("")) {
-					_chatSender.sendChat(text);
+					DixitClient.getInstance().sendChat(text);
 					typeArea.setText("");
 					typeArea.requestFocusInWindow();
 					if(_textArea.getText().length() > CHAR_LIMIT) {
@@ -123,5 +129,13 @@ public class GameWindow extends JFrame {
 	
 	public void setStatusText(Message message) {
 		
+	}
+	
+	public void addCard(Card card, BufferedImage image) {
+		_hand.put(card, image);
+	}
+	
+	public boolean hasCard(Card card) {
+		return _hand.containsKey(card);
 	}
 }

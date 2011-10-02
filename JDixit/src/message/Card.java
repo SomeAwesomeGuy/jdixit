@@ -1,20 +1,24 @@
 package message;
 
-import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
 
 public class Card implements Serializable {
 	private static final long serialVersionUID = -4879978242699827818L;
 	
 	private static int _nextId = 0;
 
-	private File _file;
+	private String _format;
 	private int _id;
 	private int _tablePosition;
+	private Player _owner;
+	private ArrayList<Player> _voters;
 	
-	public Card(File file) {
+	public Card(String format) throws IOException {
 		_id = _nextId++;
-		_file = file;
+		_voters = new ArrayList<Player>();
+		_format = format;
 	}
 	
 	
@@ -26,7 +30,29 @@ public class Card implements Serializable {
 		_tablePosition = position;
 	}
 	
+	public int getTablePosition() {
+		return _tablePosition;
+	}
 	
+	public void setOwner(Player owner) {
+		_owner = owner;
+	}
+	
+	public Player getOwner() {
+		return _owner;
+	}
+	
+	public void addVoter(Player voter) {
+		_voters.add(voter);
+	}
+	
+	public ArrayList<Player> getVoters() {
+		return _voters;
+	}
+	
+	public String getFormat() {
+		return _format;
+	}
 	
 	@Override
 	public boolean equals(Object obj) {

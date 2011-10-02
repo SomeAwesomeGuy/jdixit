@@ -1,26 +1,29 @@
 package server;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+
+import javax.imageio.ImageIO;
 
 import message.Card;
 
 public class CardHandler {
 	private static final String _cardsPath = "cards";
 	
-	private HashSet<Card> _cards;
 	private ArrayList<Card> _deck;
+	private HashMap<Card,BufferedImage> _imageMap;
 	
 	public CardHandler() throws FileNotFoundException {
-		
-		_cards = new HashSet<Card>();
+		_deck = new ArrayList<Card>();
+		_imageMap = new HashMap<Card, BufferedImage>();
 		
 		loadCards();
-		
-		
 	}
 	
 	private void loadCards() throws FileNotFoundException {
@@ -31,17 +34,32 @@ public class CardHandler {
 		
 		File[] cardFiles = cardDirectory.listFiles();
 		for(File f : cardFiles) {
-			Card card = new Card(f);
-			_cards.add(card);
-			_deck.add(card);
+			try {
+				final String name = f.getName();
+				final int index = name.lastIndexOf(".");
+				
+				
+				Card card = new Card(name.substring(index + 1).toUpperCase());
+				
+				BufferedImage image = ImageIO.read(f);
+				_imageMap.put(card, image);
+				
+				_deck.add(card);
+			} catch (IOException e) {
+				System.err.println("Error: Could not load image at " + f.getPath());
+//				e.printStackTrace();
+			}
+			
 		}
 		
 		Collections.shuffle(_deck);
 		
-		System.out.println(_cards.size() + " cards found");
+		System.out.println(_deck.size() + " cards found");
 	}
 	
-	
+	public BufferedImage getImage(Card card) {
+		return _imageMap.get(card);
+	}
 	
 	public Card deal() {
 		if(_deck.size() > 0) {

@@ -2,6 +2,8 @@ package message;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 
 public class Message implements Serializable {
 	private static final long serialVersionUID = -8006817488241702192L;
@@ -13,7 +15,7 @@ public class Message implements Serializable {
 		SUBMIT,
 		VOTE,
 		REGISTER,
-		PIC,
+		CARD,
 		UPDATE,
 		EXIT
 	}
@@ -36,6 +38,7 @@ public class Message implements Serializable {
 	private long _messageID;
 	
 	private ArrayList<Player> _players;
+	private HashMap<String, Player> _playerMap;
 	
 	private ChatLog _chatLog;
 	
@@ -47,10 +50,13 @@ public class Message implements Serializable {
 	
 	private Card _card;
 	
+	private HashSet<Card> _tableCards;
+	
 	public Message(Type type) {
 		clear();
 		_type = type;
 		_messageID = 0;
+		_playerMap = new HashMap<String, Player>();
 	}
 	
 	public void clear() {
@@ -60,7 +66,7 @@ public class Message implements Serializable {
 		_card = null;
 	}
 	
-	public void setChange() {
+	public void update() {
 		_messageID++;
 	}
 	
@@ -70,6 +76,14 @@ public class Message implements Serializable {
 	
 	public void setPlayers(ArrayList<Player> players) {
 		_players = players;
+		_playerMap.clear();
+		for(Player p : _players) {
+			_playerMap.put(p.getName(), p);
+		}
+	}
+	
+	public Player getPlayer(String name) {
+		return _playerMap.get(name);
 	}
 	
 	public ChatLog getChatLog() {
@@ -126,5 +140,13 @@ public class Message implements Serializable {
 	
 	public long getMessageID() {
 		return _messageID;
+	}
+	
+	public HashSet<Card> getTableCards() {
+		return _tableCards;
+	}
+	
+	public void setTableCards(HashSet<Card> cards) {
+		_tableCards = cards;
 	}
 }

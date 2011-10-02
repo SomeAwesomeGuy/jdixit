@@ -6,19 +6,20 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.util.HashSet;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CountDownLatch;
 
+import javax.imageio.ImageIO;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -26,12 +27,15 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 
+import message.Card;
 import message.Message;
 import message.Message.Type;
 
-public class DixitClient implements ChatSender {	
+public class DixitClient {	
 	private static final int PORT = 34948;
 	private static final int FRQ = 1000;
+	
+	private static DixitClient _instance;
 	
 	private CountDownLatch _latch;
 	
@@ -45,7 +49,9 @@ public class DixitClient implements ChatSender {
 	
 	private long _latestUpdateMessageID;
 	
-	public DixitClient() {
+	private Message _latestMessage;
+	
+	private DixitClient() {
 		_latestUpdateMessageID = -1;
 		
 		launchConnectionDialog();
@@ -53,7 +59,7 @@ public class DixitClient implements ChatSender {
 		_latch = new CountDownLatch(1);
 		try {
 			_latch.await();
-			_game = new GameWindow(this);
+			_game = new GameWindow();
 			new Timer().scheduleAtFixedRate(new Updater(), 0, FRQ);
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
@@ -136,6 +142,36 @@ public class DixitClient implements ChatSender {
 		_latch.countDown();
 	}
 	
+	private void handleUpdate(Message message) {
+		_game.updateChat(message.getChatLog());
+		
+		if(message.getStatus() != _latestMessage.getStatus()) {
+			
+			if(message.getStatus() == Message.Status.AWAITING_STORY) {
+				HashSet<Card> cards = message.getPlayer(_name).getHand();
+				for(Card c : cards) {
+					new ConnectionHandler(c).start();
+				}
+				
+			}
+		}
+		
+		_latestMessage = message;
+	}
+	
+	public void getCards(Message message) {
+		HashSet<Card> cards = message.getPlayer(_name).getHand();
+		for(Card c : cards) {
+			if(!_game.hasCard(c)) {
+				new ConnectionHandler(c).start();
+			}
+		}
+	}
+	
+	public void receiveCard(Card card, BufferedImage image) {
+		_game.addCard(card, image);
+	}
+	
 	private class Updater extends TimerTask {
 		@Override
 		public void run() {
@@ -167,6 +203,11 @@ public class DixitClient implements ChatSender {
 			_message.setMessage(message);
 		}
 		
+		public ConnectionHandler(Card card) {
+			this(Type.CARD);
+			_message.setCard(card);
+		}
+		
 		private void connect(int timeout) throws IOException {
 			_socket.connect(_address, timeout);
 			
@@ -193,6 +234,7 @@ public class DixitClient implements ChatSender {
 				
 				if(returnMessage.getType() == Type.REGISTER) {
 					_connectDialog.setVisible(false);
+					_latestMessage = returnMessage;
 					launchGame();
 				}
 				else {
@@ -238,6 +280,21 @@ public class DixitClient implements ChatSender {
 			}
 		}
 		
+		private void getCard() {
+			try {
+				connect(500);
+				_objectOut.writeObject(_message);
+				_objectOut.flush();
+				BufferedImage image = ImageIO.read(_socket.getInputStream());
+				receiveCard(_message.getCard(), image);
+				
+				close();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
 		private void getUpdate() {
 			try {
 				_message.setMessageID(_latestUpdateMessageID);
@@ -250,8 +307,7 @@ public class DixitClient implements ChatSender {
 				if(returnMessage != null) {
 					if(returnMessage.getType() == Type.UPDATE) {
 						_latestUpdateMessageID = returnMessage.getMessageID();
-						//TODO: do other stuff with Message contents
-						_game.updateChat(returnMessage.getChatLog());
+						handleUpdate(returnMessage);
 					}
 					else {
 						System.out.println("Error: received unexpected Message type.");
@@ -277,13 +333,22 @@ public class DixitClient implements ChatSender {
 					sendChat(); break;
 				case UPDATE:
 					getUpdate(); break;
+				case CARD:
+					getCard(); break;
 			}
 		}
+	}
+	
+	public static DixitClient getInstance() {
+		if(_instance == null) {
+			_instance = new DixitClient();
+		}
+		return _instance;
 	}
 
 	
 	public static void main(String[] args) {
-		new DixitClient();
+		getInstance();
 	}
 
 }

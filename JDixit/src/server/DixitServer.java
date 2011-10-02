@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.image.BufferedImage;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -13,9 +14,11 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 
+import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -31,7 +34,7 @@ import message.Message.Type;
 
 public class DixitServer {
 	private static final int PORT = 34948;
-	private static final int MIN_PLAYERS = 3;
+	private static final int MIN_PLAYERS = 1;
 //	private static final int MAX_PLAYERS = 8;
 	
 	private InfoWindow _infoWindow;
@@ -49,6 +52,7 @@ public class DixitServer {
 	
 	private int _storyTeller;
 	private Card _storyCard;
+	private ArrayList<Card> _tableCards;
 	
 	public DixitServer() {
 		_playerMap = new HashMap<String, Player>();
@@ -56,6 +60,7 @@ public class DixitServer {
 		_gameState = new Message(Type.UPDATE);
 		_storyTeller = 0;
 		_storyCard = null;
+		_tableCards = new ArrayList<Card>();
 
 		_gameState.setStatus(Status.LOBBY);
 		_gameState.setChatLog(new ChatLog());
@@ -102,7 +107,7 @@ public class DixitServer {
 	}
 	
 	private void startGame() { //TODO: may not need this
-		
+		System.out.println("Game started");
 		startTurn();
 	}
 	
@@ -119,31 +124,46 @@ public class DixitServer {
 		}
 	}
 	
+	private String getStoryTeller() {
+		return _playerList.get(_storyTeller).getName();
+	}
+	
 	private void startTurn() {
 		dealCards();
 		transferPlayersToGamestate();
-		_gameState.setStatus(Status.AWAITING_STORY);
-		_gameState.setPlayer(_playerList.get(_storyTeller).getName());
+		_gameState.setPlayer(getStoryTeller());
 		_gameState.setMessage(null);
 		_gameState.setCard(null);
-		_gameState.setChange();
+		
 		_playersLeft = _playerList.size();
 		for(Player p : _playerList) {
 			p.turnReset();
 		}
+
+		_gameState.setStatus(Status.AWAITING_STORY);
+		_gameState.update();
+		System.out.println("New turn, storyteller: " + getStoryTeller());
 	}
 	
 	private void addChat(Message message) {
 		_gameState.getChatLog().addChat(message.getPlayer(), message.getMessage());
-		_gameState.setChange();
+		_gameState.update();
 	}
 	
 	private void setStory(Message message) {
+		final Player player = _playerMap.get(message.getPlayer());
+		
+		_gameState.setTableCards(null);
+		_tableCards.clear();
+		
 		_gameState.setMessage(message.getMessage());
-		_gameState.setStatus(Status.CARD_SUBMISSION);
 		_storyCard = message.getCard();
-		_playerList.get(_storyTeller).removeFromHand(_storyCard);
-		_gameState.setChange();
+		_tableCards.add(_storyCard);
+		player.setSubmittedCard(_storyCard);
+		
+		_gameState.setStatus(Status.CARD_SUBMISSION);
+		_gameState.update();
+		System.out.println("Waiting for cards");
 	}
 	
 	private void acceptSubmission(Message message) {
@@ -154,10 +174,30 @@ public class DixitServer {
 		player.setSubmittedCard(message.getCard());
 		
 		if(_playersLeft == 0) {
-			_gameState.setStatus(Status.CARD_VOTE);
-			_gameState.setChange();
+			
 			_playersLeft = _playerMap.size();
-			//TODO: gather submitted cards
+			
+			for(Player p : _playerList) {
+				if(p.getName().equals(getStoryTeller())) {
+					continue;
+				}
+				Card submitted = p.getSubmittedCard();
+				_tableCards.add(submitted);
+			}
+			
+			Collections.shuffle(_tableCards);
+			final HashSet<Card> cards = new HashSet<Card>();
+			
+			for(int i = 0; i < _tableCards.size(); i++) {
+				Card card = _tableCards.get(i);
+				card.setTablePosition(i + 1);
+				cards.add(card);
+			}
+			
+			_gameState.setTableCards(cards);
+			_gameState.setStatus(Status.CARD_VOTE);
+			_gameState.update();
+			System.out.println("Waiting for votes");
 		}
 	}
 	
@@ -172,32 +212,26 @@ public class DixitServer {
 		player.setVotedCard(message.getCard());
 		
 		if(_playersLeft == 0) {
+			
+			for(Player p : _playerList) {
+				if(p.getName().equals(getStoryTeller())) {
+					continue;
+				}
+				Card voted = p.getVotedCard();
+				voted.addVoter(p);
+			}
+			
+			score();
+			
 			_storyTeller++;
 			_storyTeller %= _playerMap.size(); //wrap around
-			score();
 			startTurn();
 		}
 		return true;
 	}
 	
 	private void score() {
-		HashMap<Card, Player> cardMap = new HashMap<Card, Player>();
-		for(Player p : _playerList) {
-			cardMap.put(p.getSubmittedCard(), p);
-		}
-		
-		int storyVoteCount = 0;
-		for(int i = 0; i < _playerList.size(); i++) {
-			if(i == _storyTeller) {
-				continue;
-			}
-			final Player p = _playerList.get(i);
-			
-			Card votedCard = p.getVotedCard();
-			if(votedCard.equals(_storyCard)) {
-				storyVoteCount++;
-			}
-		}
+		int storyVoteCount = _playerList.get(_storyTeller).getSubmittedCard().getVoters().size();
 		
 		if(storyVoteCount == 0 || storyVoteCount == _playerList.size() - 1) {
 			for(int i = 0; i < _playerList.size(); i++) {
@@ -211,20 +245,16 @@ public class DixitServer {
 		}
 		else {
 			_playerList.get(_storyTeller).addScore(3);
-			for(int i = 0; i < _playerList.size(); i++) {
-				if(i == _storyTeller) {
-					continue;
+			
+			for(Card c : _tableCards) {
+				if(c == _storyCard) {
+					for(Player p : c.getVoters()) {
+						p.addScore(3);
+					}
 				}
-				final Player p = _playerList.get(i);
 				
-				Card votedCard = p.getVotedCard();
-				if(votedCard.equals(_storyCard)) {
-					p.addScore(3);
-					storyVoteCount++;
-				}
-				else {
-					cardMap.get(p.getVotedCard()).addScore(1);
-				}
+				int numVoters = c.getVoters().size();
+				c.getOwner().addScore(numVoters);
 			}
 		}
 	}
@@ -274,24 +304,25 @@ public class DixitServer {
 					objectOut.flush();
 				}
 				else if(type == Type.STORY) {
-					if(_gameState.getStatus() == Status.AWAITING_STORY && message.getPlayer().equals(_playerList.get(_storyTeller))) {
+					if(_gameState.getStatus() == Status.AWAITING_STORY && message.getPlayer().equals(getStoryTeller())) {
 						setStory(message);
 					}
 				}
 				else if(type == Type.SUBMIT) {
-					if(_gameState.getStatus() == Status.CARD_SUBMISSION && !message.getPlayer().equals(_playerList.get(_storyTeller))) {
+					if(_gameState.getStatus() == Status.CARD_SUBMISSION && !message.getPlayer().equals(getStoryTeller())) {
 						acceptSubmission(message);
 					}
 				}
 				else if(type == Type.VOTE) {
-					if(_gameState.getStatus() == Status.CARD_VOTE && !message.getPlayer().equals(_playerList.get(_storyTeller))) {
+					if(_gameState.getStatus() == Status.CARD_VOTE && !message.getPlayer().equals(getStoryTeller())) {
 						acceptVote(message);
 					}
 				}
-				else if(type == Type.PIC) {
-					
+				else if(type == Type.CARD) {
+					final Card card = message.getCard();
+					final BufferedImage image = _cardHandler.getImage(card);
+					ImageIO.write(image, card.getFormat(), _socket.getOutputStream());
 				}
-				
 				
 				objectIn.close();
 				objectOut.close();

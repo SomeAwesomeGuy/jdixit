@@ -1,8 +1,10 @@
 package message;
 
+import java.io.Serializable;
 import java.util.HashSet;
 
-public class Player {
+public class Player implements Serializable {
+	private static final long serialVersionUID = -7629369161724304390L;
 	
 	private String _name;
 	private int _score;
@@ -56,6 +58,7 @@ public class Player {
 	
 	public void addToHand(Card card) {
 		_hand.add(card);
+		card.setOwner(this);
 		_mostRecent = card;
 	}
 	
@@ -65,6 +68,13 @@ public class Player {
 	
 	public void setHand(HashSet<Card> hand) {
 		_hand = hand;
+		for(Card c : _hand) {
+			c.setOwner(this);
+		}
+	}
+	
+	public HashSet<Card> getHand() {
+		return _hand;
 	}
 	
 	public Card getMostRecentCard() {
@@ -90,9 +100,7 @@ public class Player {
 		clone.addScore(_score);
 		clone.setSubmittedCard(_submittedCard);
 		clone.setVotedCard(_votedCard);
-		for(Card i : _hand) {
-			clone.addToHand(i);
-		}
+		clone.setHand(_hand);
 		
 		return clone;
 	}
