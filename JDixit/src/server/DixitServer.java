@@ -1,6 +1,7 @@
 package server;
 
 import java.awt.BorderLayout;
+import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -94,7 +95,9 @@ public class DixitServer {
 		_playerMap.put(name, player);
 		_playerList.add(player);
 		_infoWindow.refreshPlayerPanel();
-		System.out.println("Player " + name + " has joined the game");
+		_gameState.getChatLog().addChat("System", "Player \"" + name + "\" has joined the game");
+		_gameState.update();
+//		System.out.println("Player " + name + " has joined the game");
 		return true;
 	}
 	
@@ -360,6 +363,8 @@ public class DixitServer {
 		}
 	}
 	
+	
+	
 	private class InfoWindow extends JFrame {
 		private static final long serialVersionUID = -4848838839984637433L;
 		
@@ -384,16 +389,24 @@ public class DixitServer {
 				@Override
 				public void actionPerformed(ActionEvent e) {
 					startGame();
+					_startButton.setEnabled(false);
 				}
 			});
 			_startButton.setEnabled(false);
 			final JPanel buttonPanel = new JPanel();
 			buttonPanel.add(_startButton);
 			
+			JPanel serverPanel = new JPanel(new BorderLayout());
+			serverPanel.add(ipPanel, BorderLayout.NORTH);
+			serverPanel.add(_playerPanel, BorderLayout.CENTER);
+			serverPanel.add(buttonPanel, BorderLayout.SOUTH);
+			
+			JLabel titleLabel = new JLabel(" JDixit ");
+			titleLabel.setFont(new Font("Harrington", Font.BOLD, 48));
+			
 			setLayout(new BorderLayout());
-			add(ipPanel, BorderLayout.NORTH);
-			add(_playerPanel, BorderLayout.CENTER);
-			add(buttonPanel, BorderLayout.SOUTH);
+			add(titleLabel, BorderLayout.NORTH);
+			add(serverPanel, BorderLayout.CENTER);
 			pack();
 			
 			setTitle("JDixit Server");

@@ -10,6 +10,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -29,6 +30,7 @@ import javax.swing.JTextField;
 
 import message.Card;
 import message.Message;
+import message.Message.Status;
 import message.Message.Type;
 
 public class DixitClient {	
@@ -50,6 +52,8 @@ public class DixitClient {
 	private long _latestUpdateMessageID;
 	
 	private Message _latestMessage;
+	
+	private int _handSize;
 	
 	private DixitClient() {
 		_latestUpdateMessageID = -1;
@@ -138,39 +142,63 @@ public class DixitClient {
 		new ConnectionHandler(message).start();
 	}
 	
+	public void submitCard(Card card) {
+		new ConnectionHandler(Type.SUBMIT, card).start();
+	}
+	
 	private void launchGame() {
 		_latch.countDown();
 	}
 	
-	private void handleUpdate(Message message) {
+	private synchronized void handleUpdate(Message message) {
+		
 		_game.updateChat(message.getChatLog());
 		
 		if(message.getStatus() != _latestMessage.getStatus()) {
+			_game.setStatus(message);
 			
-			if(message.getStatus() == Message.Status.AWAITING_STORY) {
-				HashSet<Card> cards = message.getPlayer(_name).getHand();
-				for(Card c : cards) {
-					new ConnectionHandler(c).start();
+			if(message.getStatus() == Status.AWAITING_STORY) {
+				getCards(message);
+				if(message.getPlayer().equals(_name)) {
+					_game.promptForStory();
 				}
-				
 			}
 		}
-		
+		_latestUpdateMessageID = message.getMessageID();
 		_latestMessage = message;
 	}
 	
-	public void getCards(Message message) {
+	private void getCards(Message message) {
 		HashSet<Card> cards = message.getPlayer(_name).getHand();
+		_handSize = cards.size();
 		for(Card c : cards) {
 			if(!_game.hasCard(c)) {
-				new ConnectionHandler(c).start();
+				new ConnectionHandler(Type.CARD, c).start();
 			}
 		}
 	}
 	
-	public void receiveCard(Card card, BufferedImage image) {
+	private void receiveCard(Card card, BufferedImage image) {
 		_game.addCard(card, image);
+		if(_game.getHandSize() == _handSize) {
+			_game.redrawHand();
+		}
 	}
+	
+	public void sendSubmission(Card card, String story) {
+		if(story == null) {
+			new ConnectionHandler(Type.SUBMIT, card).start();
+		}
+		else {
+			new ConnectionHandler(card, story).start();
+		}
+	}
+	
+	public String getName() {
+		return _name;
+	}
+	
+	
 	
 	private class Updater extends TimerTask {
 		@Override
@@ -178,6 +206,10 @@ public class DixitClient {
 			new ConnectionHandler(Type.UPDATE).start();
 		}
 	}
+	
+	
+	
+	
 	
 	private class ConnectionHandler extends Thread {		
 		private Message.Type _mode;
@@ -203,9 +235,15 @@ public class DixitClient {
 			_message.setMessage(message);
 		}
 		
-		public ConnectionHandler(Card card) {
-			this(Type.CARD);
+		public ConnectionHandler(Message.Type mode, Card card) {
+			this(mode);
 			_message.setCard(card);
+		}
+		
+		public ConnectionHandler(Card card, String message) {
+			this(Type.STORY);
+			_message.setCard(card);
+			_message.setMessage(message);
 		}
 		
 		private void connect(int timeout) throws IOException {
@@ -250,6 +288,9 @@ public class DixitClient {
 			catch (UnknownHostException e) {
 				unknownServer();
 			} 
+			catch (ConnectException e) {
+				unknownServer();
+			}
 			catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -267,7 +308,7 @@ public class DixitClient {
 			_connectButton.setEnabled(true);
 		}
 		
-		private void sendChat() {
+		private void sendMessage() {
 			try {
 				connect(500);
 				_objectOut.writeObject(_message);
@@ -306,7 +347,6 @@ public class DixitClient {
 				final Message returnMessage = (Message)_objectIn.readObject();
 				if(returnMessage != null) {
 					if(returnMessage.getType() == Type.UPDATE) {
-						_latestUpdateMessageID = returnMessage.getMessageID();
 						handleUpdate(returnMessage);
 					}
 					else {
@@ -330,7 +370,9 @@ public class DixitClient {
 				case REGISTER:
 					initiateConnection(); break;
 				case CHAT:
-					sendChat(); break;
+				case SUBMIT:
+				case STORY:
+					sendMessage(); break;
 				case UPDATE:
 					getUpdate(); break;
 				case CARD:

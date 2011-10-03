@@ -22,7 +22,7 @@ public class Message implements Serializable {
 	
 	public enum Status {
 		LOBBY ("Waiting for game to start"),
-		AWAITING_STORY ("is thinking of a story"),
+		AWAITING_STORY (" is thinking of a story"),
 		CARD_SUBMISSION ("Pick a card from your hand"),
 		CARD_VOTE("Choose the storyteller's card");
 		
