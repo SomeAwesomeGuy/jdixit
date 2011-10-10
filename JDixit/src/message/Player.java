@@ -1,21 +1,26 @@
 package message;
 
 import java.io.Serializable;
-import java.util.HashSet;
+import java.util.ArrayList;
 
 public class Player implements Serializable {
 	private static final long serialVersionUID = -7629369161724304390L;
 	
 	private String _name;
 	private int _score;
-	private Card _submittedCard, _votedCard, _mostRecent;
-	private HashSet<Card> _hand;
+	private Card _submittedCard, _votedCard;
+	private ArrayList<Card> _hand;
 	
 	public Player(String name) {
 		_name = name;
-		_score = 0;
+		gameReset();
+	}
+	
+	public void gameReset() {
 		_hand = null;
-		_mostRecent = null;
+		_score = 0;
+		_submittedCard = null;
+		_votedCard = null;
 	}
 	
 	public void turnReset() {
@@ -37,7 +42,7 @@ public class Player implements Serializable {
 	}
 	
 	public void setSubmittedCard(Card card) {
-		_votedCard = card;
+		_submittedCard = card;
 	}
 	
 	public Card getVotedCard() {
@@ -45,11 +50,7 @@ public class Player implements Serializable {
 	}
 	
 	public void setVotedCard(Card card) {
-		_submittedCard = card;
-	}
-	
-	public boolean isInHand(Card card) {
-		return _hand.contains(card);
+		_votedCard = card;
 	}
 	
 	public void addScore(int points) {
@@ -59,26 +60,23 @@ public class Player implements Serializable {
 	public void addToHand(Card card) {
 		_hand.add(card);
 		card.setOwner(this);
-		_mostRecent = card;
 	}
 	
 	public void removeFromHand(Card card) {
 		_hand.remove(card);
 	}
 	
-	public void setHand(HashSet<Card> hand) {
+	public void setHand(ArrayList<Card> hand) {
 		_hand = hand;
-		for(Card c : _hand) {
-			c.setOwner(this);
+		if(hand != null) {
+			for(Card c : _hand) {
+				c.setOwner(this);
+			}
 		}
 	}
 	
-	public HashSet<Card> getHand() {
+	public ArrayList<Card> getHand() {
 		return _hand;
-	}
-	
-	public Card getMostRecentCard() {
-		return _mostRecent;
 	}
 	
 	@Override

@@ -13,8 +13,10 @@ import java.io.ObjectOutputStream;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -50,13 +52,13 @@ public class DixitClient {
 	private GameWindow _game;
 	
 	private long _latestUpdateMessageID;
+	private Status _latestStatus;
 	
-	private Message _latestMessage;
-	
-	private int _handSize;
+	private int _handSize, _tableSize;
 	
 	private DixitClient() {
 		_latestUpdateMessageID = -1;
+		_latestStatus = Status.LOBBY;
 		
 		launchConnectionDialog();
 		
@@ -69,6 +71,8 @@ public class DixitClient {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+		Runtime.getRuntime().addShutdownHook(new ShutDownThread());
 	}
 	
 	
@@ -82,7 +86,7 @@ public class DixitClient {
 		labelPanel.add(nameLabel);
 		
 		final JTextField ipField = new JTextField("localhost", 15); //TODO: fix this for release
-		final JTextField nameField = new JTextField(15);
+		final JTextField nameField = new JTextField("Player " + (int)(Math.random() * 1000), 15);	//TODO: fix this for release
 		final JPanel fieldPanel = new JPanel(new GridLayout(0, 1));
 		fieldPanel.add(ipField);
 		fieldPanel.add(nameField);
@@ -96,7 +100,7 @@ public class DixitClient {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				_ipAddress = ipField.getText();
-				_name = nameField.getText();
+				_name = nameField.getText().trim();
 				registerPlayer();
 			}
 		});
@@ -151,26 +155,53 @@ public class DixitClient {
 	}
 	
 	private synchronized void handleUpdate(Message message) {
-		
 		_game.updateChat(message.getChatLog());
+		_latestUpdateMessageID = message.getMessageID();
+		Status status = message.getStatus();
 		
-		if(message.getStatus() != _latestMessage.getStatus()) {
+		if(status != Status.LOBBY) {
+			_game.redrawScore(message.getPlayers());
+		}
+		
+		if(status != _latestStatus) {			
 			_game.setStatus(message);
+			_latestStatus = status;
 			
-			if(message.getStatus() == Status.AWAITING_STORY) {
+			if(status == Status.LOBBY) {
+				_game.clearCards();
+				_game.redrawHand();
+				_game.redrawTable();
+				_game.redrawScore(message.getPlayers());
+			}
+			else if(status == Status.AWAITING_STORY) {
 				getCards(message);
+				
+				ArrayList<Card> cards = message.getTableCards();
+				if(cards != null) {
+					_game.updateTableCards(cards);
+				}
+				
 				if(message.getPlayer().equals(_name)) {
 					_game.promptForStory();
 				}
 			}
+			else if(status == Status.CARD_SUBMISSION) {
+				_game.showHand();
+			}
+			else if(status == Status.CARD_VOTE) {
+				_game.clearTable();
+				getCards(message);
+			}
+			else if(status == Status.GAME_END) {
+				
+			}
 		}
-		_latestUpdateMessageID = message.getMessageID();
-		_latestMessage = message;
 	}
 	
 	private void getCards(Message message) {
-		HashSet<Card> cards = message.getPlayer(_name).getHand();
+		ArrayList<Card> cards = message.getStatus() == Status.AWAITING_STORY ? message.getPlayer(_name).getHand() : message.getTableCards();
 		_handSize = cards.size();
+		_tableSize = message.getTableCards() == null ? 0 : message.getTableCards().size();
 		for(Card c : cards) {
 			if(!_game.hasCard(c)) {
 				new ConnectionHandler(Type.CARD, c).start();
@@ -180,14 +211,27 @@ public class DixitClient {
 	
 	private void receiveCard(Card card, BufferedImage image) {
 		_game.addCard(card, image);
-		if(_game.getHandSize() == _handSize) {
-			_game.redrawHand();
+		if(_latestStatus == Status.AWAITING_STORY) {
+			if(_game.getHandSize() == _handSize) {
+				_game.redrawHand();
+			}
+		}
+		else if(_latestStatus == Status.CARD_VOTE) {
+			if(_game.getTableSize() == _tableSize) {
+				_game.redrawTable();
+				_game.showTable();
+			}
 		}
 	}
 	
 	public void sendSubmission(Card card, String story) {
 		if(story == null) {
-			new ConnectionHandler(Type.SUBMIT, card).start();
+			if(_latestStatus == Status.CARD_SUBMISSION) {
+				new ConnectionHandler(Type.SUBMIT, card).start();
+			}
+			else if(_latestStatus == Status.CARD_VOTE) {
+				new ConnectionHandler(Type.VOTE, card).start();
+			}
 		}
 		else {
 			new ConnectionHandler(card, story).start();
@@ -198,7 +242,10 @@ public class DixitClient {
 		return _name;
 	}
 	
-	
+	private void disconnected() {
+		JOptionPane.showMessageDialog(_game, "Unable to connect with the server. This client will now close.");
+		System.exit(0);
+	}
 	
 	private class Updater extends TimerTask {
 		@Override
@@ -206,10 +253,6 @@ public class DixitClient {
 			new ConnectionHandler(Type.UPDATE).start();
 		}
 	}
-	
-	
-	
-	
 	
 	private class ConnectionHandler extends Thread {		
 		private Message.Type _mode;
@@ -272,12 +315,12 @@ public class DixitClient {
 				
 				if(returnMessage.getType() == Type.REGISTER) {
 					_connectDialog.setVisible(false);
-					_latestMessage = returnMessage;
 					launchGame();
 				}
 				else {
 					JOptionPane.showMessageDialog(_connectDialog, returnMessage.getMessage());
 					_connectButton.setEnabled(true);
+					_connectStatus.setText("Connection failed");
 				}
 				
 				close();
@@ -315,7 +358,14 @@ public class DixitClient {
 				_objectOut.flush();
 				
 				close();
-			} catch (IOException e) {
+			} 
+			catch (SocketTimeoutException e) {
+				System.err.println("Error: Could not reach server");
+			}
+			catch (SocketException e) {
+				System.err.println("Error: Could not reach server");
+			}
+			catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
@@ -355,10 +405,18 @@ public class DixitClient {
 				}
 				
 				close();
-			} catch (IOException e) {
+			} 
+			catch (SocketTimeoutException e) {
+				disconnected();
+			}
+			catch (SocketException e) {
+				disconnected();
+			}
+			catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
-			} catch (ClassNotFoundException e) {
+			} 
+			catch (ClassNotFoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
@@ -371,13 +429,22 @@ public class DixitClient {
 					initiateConnection(); break;
 				case CHAT:
 				case SUBMIT:
+				case VOTE:
 				case STORY:
+				case EXIT:
 					sendMessage(); break;
 				case UPDATE:
 					getUpdate(); break;
 				case CARD:
 					getCard(); break;
 			}
+		}
+	}
+	
+	private class ShutDownThread extends Thread {
+		@Override
+		public void run() {
+			new ConnectionHandler(Type.EXIT).start();
 		}
 	}
 	

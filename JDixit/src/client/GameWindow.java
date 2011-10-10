@@ -6,13 +6,18 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Set;
 
 import javax.swing.AbstractAction;
@@ -29,6 +34,8 @@ import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 import org.omg.CORBA._PolicyStub;
 
@@ -40,6 +47,7 @@ import message.Chat;
 import message.ChatLog;
 import message.Message;
 import message.Message.Status;
+import message.Player;
 
 public class GameWindow extends JFrame {
 	private static final long serialVersionUID = -5499624552626787637L;
@@ -52,25 +60,29 @@ public class GameWindow extends JFrame {
 	
 	private JPanel _handPanel, _tablePanel, _scorePanel, _cardPanel;
 	private JButton _submitButton;
+	private JTabbedPane _tabbedPane;
 	
 	private ThumbnailLabel _selectedThumbnail;
 	private Card _selectedCard;
 	
 	private int _latestChatID;
 	
-	private HashMap<Card,BufferedImage> _cardMap;
-	private ArrayList<Card> _cardList;
-
-	private ArrayList<BufferedImage> _tableCards;
+	private HashMap<Card, BufferedImage> _cardImageMap;
+	private HashMap<Card, JPanel> _cardPanelMap;
+	private HashMap<Card, ThumbnailLabel> _cardLabelMap;
+	private ArrayList<Card> _handCardList, _tableCardList;
 	
 	private Status _status;
-	private boolean _isStoryTime;
+	private boolean _isStoryTime, _sentCard;
 
 	public GameWindow() {
 		super();
 		_latestChatID = -1;
-		_cardMap = new HashMap<Card,BufferedImage>();
-		_cardList = new ArrayList<Card>();
+		_cardImageMap = new HashMap<Card,BufferedImage>();
+		_cardPanelMap = new HashMap<Card, JPanel>();
+		_cardLabelMap = new HashMap<Card, ThumbnailLabel>();
+		_handCardList = new ArrayList<Card>();
+		_tableCardList = new ArrayList<Card>();
 		
 		buildWindow();
 		
@@ -112,12 +124,16 @@ public class GameWindow extends JFrame {
 			
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				Card selected = _selectedThumbnail.getCard();
-				if(_isStoryTime) {
-					storyInput(selected);
+				if(_status == Status.AWAITING_STORY) {
+					if(_isStoryTime) {
+						storyInput();
+					}
 				}
-				else {
-					
+				else if(_status == Status.CARD_SUBMISSION){
+					submitCard();
+				}
+				else if(_status == Status.CARD_VOTE) {
+					voteCard();
 				}
 			}
 		});
@@ -132,28 +148,33 @@ public class GameWindow extends JFrame {
 	}
 	
 	private JTabbedPane getThumbPanel() {
-		FlowLayout layout = new FlowLayout();
-		layout.setHgap(20);
-		_handPanel = new JPanel(layout);
+		FlowLayout handLayout = new FlowLayout();
+		handLayout.setHgap(20);
+		_handPanel = new JPanel(handLayout);
 		JScrollPane handPane = new JScrollPane(_handPanel);
 		
-		_tablePanel = new JPanel();
+		FlowLayout tableLayout = new FlowLayout();
+		tableLayout.setHgap(20);
+		_tablePanel = new JPanel(tableLayout);
+		JScrollPane tablePane = new JScrollPane(_tablePanel);
 		
+		FlowLayout scoreLayout = new FlowLayout();
+		scoreLayout.setHgap(20);
+		_scorePanel = new JPanel(scoreLayout);
+		JScrollPane scorePane = new JScrollPane(_scorePanel);
 		
-		_scorePanel = new JPanel();
+		_tabbedPane = new JTabbedPane(JTabbedPane.LEFT);
+		_tabbedPane.addTab("Hand", handPane);
+		_tabbedPane.addTab("Table", tablePane);
+		_tabbedPane.addTab("Score", scorePane);
 		
-		
-		JTabbedPane pane = new JTabbedPane(JTabbedPane.LEFT);
-		pane.addTab("Hand", handPane);
-		pane.addTab("Table", _tablePanel);
-		pane.addTab("Score", _scorePanel);
-		return pane;
+		return _tabbedPane;
 	}
 	
 	private JPanel getStatusPanel() {
 		JLabel titleLabel = new JLabel("JDixit");
 		titleLabel.setFont(new Font("Harrington", Font.BOLD, 52));
-		titleLabel.setToolTipText("Made by Sean W., dedicated to the Mechabananas");
+		titleLabel.setToolTipText("<html>Made by Sean W.<br>Dedicated to the Mechabananas</html>");
 		
 		JPanel titlePanel = new JPanel();
 		titlePanel.add(titleLabel);
@@ -222,9 +243,29 @@ public class GameWindow extends JFrame {
 		return chatPanel;
 	}
 	
-	private void storyInput(Card card) {
+	private void storyInput() {
+		_sentCard = true;
 		String story = (String)JOptionPane.showInputDialog(this, "Tell us your story...", "Story Time!", JOptionPane.PLAIN_MESSAGE, null, null, "");
-		DixitClient.getInstance().sendSubmission(card, story);
+		if(story != null && !story.equals("")) {
+			_selectedCard.setAsStoryCard();
+			DixitClient.getInstance().sendSubmission(_selectedCard, story);
+			removeCard(_selectedCard);
+			redrawHand();
+		}
+	}
+	
+	private void submitCard() {
+		_sentCard = true;
+		_submitButton.setEnabled(false);
+		DixitClient.getInstance().sendSubmission(_selectedCard, null);
+		removeCard(_selectedCard);
+		redrawHand();
+	}
+	
+	private void voteCard() {
+		_sentCard = true;
+		_submitButton.setEnabled(false);
+		DixitClient.getInstance().sendSubmission(_selectedCard, null);
 	}
 	
 	public void updateChat(ChatLog log) {
@@ -240,90 +281,202 @@ public class GameWindow extends JFrame {
 	
 	public void setStatus(Message message) {
 		_status = message.getStatus();
+		_sentCard = false;
+		_submitButton.setEnabled(false);
 		switch(_status) {
 		case LOBBY:
-			_statusLabel.setText(message.getStatus().toString());
+			_statusLabel.setText(_status.toString());
 			break;
 		case AWAITING_STORY:
 			_isStoryTime = false;
-			_submitButton.setEnabled(false);
-			_statusLabel.setText(message.getPlayer() + message.getStatus().toString());
+			_statusLabel.setText(message.getPlayer() + _status.toString());
 			break;
 		case CARD_SUBMISSION:
-			_submitButton.setEnabled(!_isStoryTime);
+			_storyArea.setText(message.getMessage());
 			if(_isStoryTime) {
 				_statusLabel.setText("Waiting for other players to submit");
 				break;
 			}
-			_storyArea.setText(message.getMessage());
 		case CARD_VOTE:
 			if(_isStoryTime) {
 				_statusLabel.setText("Waiting for other players to vote");
 				break;
 			}
-			_statusLabel.setText(message.getStatus().toString());
+			_statusLabel.setText(_status.toString());
 			break;
+		case GAME_END:
+			_statusLabel.setText(_status.toString() + message.getPlayer());
 		}
+		setSelected(_selectedThumbnail);
 	}
 	
 	public void promptForStory() {
 		_isStoryTime = true;
 		JOptionPane.showMessageDialog(this, "You're the storyteller!\nSubmit a card and write your story.");
-		_submitButton.setEnabled(true);
+	}
+	
+	public void updateTableCards(ArrayList<Card> cards) {
+		showTable();
+		for(Card c : cards) {
+			ThumbnailLabel label = _cardLabelMap.get(c);
+			label.setInfo(c);
+			if(c.isStoryCard()) {
+				label.setStoryCard();
+				setSelected(label);
+			}
+		}
+	}
+	
+	public void clearCards() {
+		ArrayList<Card> cardList = new ArrayList<Card>();
+		cardList.addAll(_handCardList);
+		
+		for(Card c : cardList) {
+			removeCard(c);
+		}
+		
+		cardList.clear();
+		cardList.addAll(_tableCardList);
+		
+		for(Card c : cardList) {
+			removeCard(c);
+		}
+		_cardPanel.removeAll();
+		_cardPanel.repaint();
+		_cardPanel.revalidate();
 	}
 	
 	public void addCard(Card card, BufferedImage image) {
-		_cardList.add(card);
-		_cardMap.put(card, image);
-		_selectedCard = card;
+		_cardImageMap.put(card, image);
+		
+		if(_status == Status.AWAITING_STORY) {
+			_handCardList.add(card);
+		}
+		else if(_status == Status.CARD_VOTE) {
+			_tableCardList.add(card);
+		}
 	}
 	
 	public boolean hasCard(Card card) {
-		return _cardMap.containsKey(card);
+		return _cardImageMap.containsKey(card);
+	}
+	
+	public void clearTable() {
+		ArrayList<Card> list = new ArrayList<Card>();
+		list.addAll(_tableCardList);
+		for(Card c : list) {
+			removeCard(c);
+		}
+	}
+	
+	public void showTable() {
+		_tabbedPane.setSelectedIndex(1);
+	}
+	
+	public void showHand() {
+		_tabbedPane.setSelectedIndex(0);
 	}
 	
 	public void removeCard(Card card) {
-		_cardList.remove(card);
-		_cardMap.remove(card);
-		CardLayout layout = (CardLayout)_cardPanel.getLayout();
-		Component[] components = _cardPanel.getComponents();
-		
-		for(Component c : components) {
-			if(c.getName().equals("" + card.getId())) {
-				layout.removeLayoutComponent(c);
-				System.out.println("Component removed");	//TODO: Remove this
-				break;
-			}
+		_handCardList.remove(card);
+		_tableCardList.remove(card);
+		_cardImageMap.remove(card);
+		_cardLabelMap.remove(card);
+		if(card == _selectedCard) {
+			_selectedCard = null;
 		}
+		CardLayout layout = (CardLayout)_cardPanel.getLayout();
 		
-		redrawHand();
+		layout.removeLayoutComponent(_cardPanelMap.get(card));
+		_cardPanelMap.remove(card);
 	}
 	
 	public void setSelected(ThumbnailLabel label) {
+		if(label == null) {
+			return;
+		}
+		
 		if(_selectedThumbnail != null) {
 			_selectedThumbnail.setSelected(false);
 		}
 		_selectedThumbnail = label;
 		_selectedThumbnail.setSelected(true);
+		_selectedCard = _selectedThumbnail.getCard();
 		CardLayout layout = (CardLayout)_cardPanel.getLayout();
 		layout.show(_cardPanel, "" + label.getCard().getId());
+		
+		switch(_status) {
+		case AWAITING_STORY:
+			_submitButton.setEnabled(!_sentCard && _isStoryTime && _selectedThumbnail.isHandCard());
+			break;
+		case CARD_SUBMISSION:
+			_submitButton.setEnabled(!_sentCard && !_isStoryTime && _selectedThumbnail.isHandCard());
+			break;
+		case CARD_VOTE:
+			_submitButton.setEnabled(!_sentCard && !_isStoryTime && !_selectedThumbnail.isHandCard());
+			break;
+		case GAME_END:
+			_submitButton.setEnabled(false);
+			break;
+		}
 	}
 	
 	public int getHandSize() {
-		return _cardMap.size();
+		return _handCardList.size();
+	}
+	
+	public int getTableSize() {
+		return _tableCardList.size();
+	}
+	
+	public void redrawTable() {
+		_tablePanel.removeAll();
+		_tablePanel.repaint();
+		
+		Card[] order = new Card[_tableCardList.size()];
+		
+		for(Card c : _tableCardList) {
+			order[c.getTablePosition()] = c;
+		}
+
+		for(Card c : order) {
+			final BufferedImage image = _cardImageMap.get(c);
+			final JPanel imagePanel = new JPanel(new GridBagLayout());
+			imagePanel.add(new JLabel(new ImageIcon(image)), new GridBagConstraints());
+			_cardPanel.add(imagePanel, "" + c.getId());
+			_cardPanelMap.put(c, imagePanel);
+			
+			final ThumbnailLabel label = new ThumbnailLabel(c, new ImageIcon(Scalr.resize(image, 100)), false);
+			label.addMouseListener(new MouseAdapter() {
+				@Override
+				public void mousePressed(MouseEvent e) {
+					setSelected(label);
+				}
+			});
+			
+			_tablePanel.add(label);
+			_cardLabelMap.put(c, label);
+		}
+		
+		_handPanel.revalidate();
 	}
 	
 	public void redrawHand() {
 		_handPanel.removeAll();
+		_handPanel.repaint();
+		
+		if(_selectedCard == null && _handCardList.size() > 0) {
+			_selectedCard = _handCardList.get(_handCardList.size() - 1);
+		}
 
-		for(Card c : _cardList) {
-			final BufferedImage image = _cardMap.get(c);
-			JPanel imagePanel = new JPanel();
-			imagePanel.add(new JLabel(new ImageIcon(image)));
+		for(Card c : _handCardList) {
+			final BufferedImage image = _cardImageMap.get(c);
+			final JPanel imagePanel = new JPanel(new GridBagLayout());
+			imagePanel.add(new JLabel(new ImageIcon(image)), new GridBagConstraints());
 			_cardPanel.add(imagePanel, "" + c.getId());
+			_cardPanelMap.put(c, imagePanel);
 			
-			final BufferedImage thumb = Scalr.resize(image, 100); 
-			final ThumbnailLabel label = new ThumbnailLabel(c, new ImageIcon(thumb));
+			final ThumbnailLabel label = new ThumbnailLabel(c, new ImageIcon(Scalr.resize(image, 100)), true);
 			label.addMouseListener(new MouseAdapter() {
 				@Override
 				public void mousePressed(MouseEvent e) {
@@ -332,6 +485,7 @@ public class GameWindow extends JFrame {
 			});
 			
 			_handPanel.add(label);
+			_cardLabelMap.put(c, label);
 			
 			if(c == _selectedCard) {
 				_selectedThumbnail = label;
@@ -339,5 +493,27 @@ public class GameWindow extends JFrame {
 		}
 		setSelected(_selectedThumbnail);
 		_handPanel.revalidate();
+	}
+	
+	public void redrawScore(ArrayList<Player> players) {
+		_scorePanel.removeAll();
+		_scorePanel.repaint();
+		
+		if(players != null) {
+			Collections.sort(players, new Comparator<Player>() {
+				@Override
+				public int compare(Player p1, Player p2) {
+					return p2.getScore() - p1.getScore();
+				}
+			});
+			
+			for(Player p : players) {
+				JLabel label = new JLabel("<html>" + p.getName() + "<br><br>" + p.getScore() + "</html>");
+				label.setFont(new Font("Harrington", Font.BOLD, 20));
+				_scorePanel.add(label);
+			}
+		}
+		
+		_scorePanel.revalidate();
 	}
 }

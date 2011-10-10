@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 
 import javax.imageio.ImageIO;
 
@@ -26,6 +25,12 @@ public class CardHandler {
 		loadCards();
 	}
 	
+	public void resetDeck() {
+		_deck.clear();
+		_deck.addAll(_imageMap.keySet());
+		Collections.shuffle(_deck);
+	}
+	
 	private void loadCards() throws FileNotFoundException {
 		File cardDirectory = new File(_cardsPath);
 		if(!cardDirectory.exists() || !cardDirectory.isDirectory()) {
@@ -37,16 +42,21 @@ public class CardHandler {
 			try {
 				final String name = f.getName();
 				final int index = name.lastIndexOf(".");
+				final String extension = name.substring(index + 1).toLowerCase();
 				
+				if(!isSupportedFormat(extension)) {
+					System.err.println("Error: unsupported image format for " + f.getName());
+					continue;
+				}
 				
-				Card card = new Card(name.substring(index + 1).toUpperCase());
+				Card card = new Card(extension);
 				
 				BufferedImage image = ImageIO.read(f);
 				_imageMap.put(card, image);
 				
 				_deck.add(card);
 			} catch (IOException e) {
-				System.err.println("Error: Could not load image at " + f.getPath());
+				System.err.println("Error: Could not load image at " + f.getName());
 //				e.printStackTrace();
 			}
 			
@@ -57,8 +67,24 @@ public class CardHandler {
 		System.out.println(_deck.size() + " cards found");
 	}
 	
+	private boolean isSupportedFormat(String format) {
+		final String[] formatNames = ImageIO.getReaderFormatNames();
+		
+		for(String f : formatNames) {
+			if(f.equals(format)) {
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
 	public BufferedImage getImage(Card card) {
 		return _imageMap.get(card);
+	}
+	
+	public int deckSize() {
+		return _deck.size();
 	}
 	
 	public Card deal() {
@@ -68,12 +94,12 @@ public class CardHandler {
 		return null;
 	}
 	
-	public HashSet<Card> dealHand() {
-		if(_deck.size() < 6) {		// TODO: Parameterize hand size?
+	public ArrayList<Card> dealHand(int handSize) {
+		if(_deck.size() < handSize) {
 			return null;
 		}
-		HashSet<Card> hand = new HashSet<Card>();
-		for(int i = 0; i < 6; i++) {		
+		ArrayList<Card> hand = new ArrayList<Card>();
+		for(int i = 0; i < handSize; i++) {		
 			hand.add(_deck.remove(0));
 		}
 		

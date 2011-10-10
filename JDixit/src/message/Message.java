@@ -24,7 +24,9 @@ public class Message implements Serializable {
 		LOBBY ("Waiting for game to start"),
 		AWAITING_STORY (" is thinking of a story"),
 		CARD_SUBMISSION ("Pick a card from your hand"),
-		CARD_VOTE("Choose the storyteller's card");
+		CARD_VOTE("Choose the storyteller's card"),
+		GAME_END("Game over! The winner is ");
+		
 		
 		private String _statusMessage;
 		private Status(String message) {
@@ -50,7 +52,7 @@ public class Message implements Serializable {
 	
 	private Card _card;
 	
-	private HashSet<Card> _tableCards;
+	private ArrayList<Card> _tableCards;
 	
 	public Message(Type type) {
 		clear();
@@ -77,8 +79,10 @@ public class Message implements Serializable {
 	public void setPlayers(ArrayList<Player> players) {
 		_players = players;
 		_playerMap.clear();
-		for(Player p : _players) {
-			_playerMap.put(p.getName(), p);
+		if(players != null) {
+			for(Player p : _players) {
+				_playerMap.put(p.getName(), p);
+			}
 		}
 	}
 	
@@ -142,11 +146,11 @@ public class Message implements Serializable {
 		return _messageID;
 	}
 	
-	public HashSet<Card> getTableCards() {
+	public ArrayList<Card> getTableCards() {
 		return _tableCards;
 	}
 	
-	public void setTableCards(HashSet<Card> cards) {
+	public void setTableCards(ArrayList<Card> cards) {
 		_tableCards = cards;
 	}
 }
