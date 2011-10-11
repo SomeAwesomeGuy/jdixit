@@ -3,7 +3,6 @@ package client;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -17,8 +16,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Set;
 
 import javax.swing.AbstractAction;
 import javax.swing.ImageIcon;
@@ -34,10 +31,6 @@ import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
-
-import org.omg.CORBA._PolicyStub;
 
 import com.thebuzzmedia.imgscalr.Scalr;
 
@@ -121,7 +114,6 @@ public class GameWindow extends JFrame {
 		
 		_submitButton = new JButton("Submit");
 		_submitButton.addActionListener(new ActionListener() {
-			
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				if(_status == Status.AWAITING_STORY) {
@@ -244,9 +236,9 @@ public class GameWindow extends JFrame {
 	}
 	
 	private void storyInput() {
-		_sentCard = true;
 		String story = (String)JOptionPane.showInputDialog(this, "Tell us your story...", "Story Time!", JOptionPane.PLAIN_MESSAGE, null, null, "");
 		if(story != null && !story.equals("")) {
+			_sentCard = true;
 			_selectedCard.setAsStoryCard();
 			DixitClient.getInstance().sendSubmission(_selectedCard, story);
 			removeCard(_selectedCard);
@@ -442,7 +434,7 @@ public class GameWindow extends JFrame {
 		for(Card c : order) {
 			final BufferedImage image = _cardImageMap.get(c);
 			final JPanel imagePanel = new JPanel(new GridBagLayout());
-			imagePanel.add(new JLabel(new ImageIcon(image)), new GridBagConstraints());
+			imagePanel.add(new JLabel(new ImageIcon(Scalr.resize(image, 500))), new GridBagConstraints());
 			_cardPanel.add(imagePanel, "" + c.getId());
 			_cardPanelMap.put(c, imagePanel);
 			
@@ -472,7 +464,7 @@ public class GameWindow extends JFrame {
 		for(Card c : _handCardList) {
 			final BufferedImage image = _cardImageMap.get(c);
 			final JPanel imagePanel = new JPanel(new GridBagLayout());
-			imagePanel.add(new JLabel(new ImageIcon(image)), new GridBagConstraints());
+			imagePanel.add(new JLabel(new ImageIcon(Scalr.resize(image, 500))), new GridBagConstraints());
 			_cardPanel.add(imagePanel, "" + c.getId());
 			_cardPanelMap.put(c, imagePanel);
 			

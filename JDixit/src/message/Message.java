@@ -3,7 +3,6 @@ package message;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 
 public class Message implements Serializable {
 	private static final long serialVersionUID = -8006817488241702192L;
@@ -25,7 +24,7 @@ public class Message implements Serializable {
 		AWAITING_STORY (" is thinking of a story"),
 		CARD_SUBMISSION ("Pick a card from your hand"),
 		CARD_VOTE("Choose the storyteller's card"),
-		GAME_END("Game over! The winner is ");
+		GAME_END("Winner: ");
 		
 		
 		private String _statusMessage;

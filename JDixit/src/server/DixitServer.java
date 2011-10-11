@@ -18,14 +18,16 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 
 import message.Card;
 import message.ChatLog;
@@ -39,6 +41,7 @@ public class DixitServer {
 	private static final int MIN_PLAYERS = 3;
 	private static final int MAX_PLAYERS = 8;
 	private static final int HAND_SIZE = 6;
+	private static final String SYSTEM = "System";
 	
 	private InfoWindow _infoWindow;
 	
@@ -53,7 +56,7 @@ public class DixitServer {
 	
 	private Message _gameState;
 	
-	private int _storyTeller;
+	private int _storyTeller, _scoreLimit;
 	private Card _storyCard;
 	private ArrayList<Card> _tableCards;
 	
@@ -64,6 +67,7 @@ public class DixitServer {
 		_storyTeller = 0;
 		_storyCard = null;
 		_tableCards = new ArrayList<Card>();
+		_scoreLimit = 0;
 
 		_gameState.setStatus(Status.LOBBY);
 		_gameState.setChatLog(new ChatLog());
@@ -90,7 +94,7 @@ public class DixitServer {
 	}
 	
 	private synchronized String registerPlayer(String name, ClientConnection connection) {
-		if(_playerMap.containsKey(name) || name.equals("System")) {
+		if(_playerMap.containsKey(name) || name.equals(SYSTEM)) {
 			return "This name is already taken.";
 		}
 		if(_playerList.size() == MAX_PLAYERS) {
@@ -100,9 +104,8 @@ public class DixitServer {
 		_playerMap.put(name, player);
 		_playerList.add(player);
 		_infoWindow.refreshPlayerPanel();
-		_gameState.getChatLog().addChat("System", "Player \"" + name + "\" has joined the game");
+		_gameState.getChatLog().addChat(SYSTEM, "Player \"" + name + "\" has joined the game");
 		_gameState.update();
-//		System.out.println("Player " + name + " has joined the game");
 		return null;
 	}
 	
@@ -118,7 +121,7 @@ public class DixitServer {
 		System.out.println("Game started");
 		Collections.shuffle(_playerList);
 		dealCards();
-		_gameState.getChatLog().addChat("System", "Let the games begin!");
+		_gameState.getChatLog().addChat(SYSTEM, "Let the games begin!");
 		startTurn();
 	}
 	
@@ -130,7 +133,7 @@ public class DixitServer {
 		}
 		
 		_gameState.setPlayers(null);
-		_gameState.getChatLog().addChat("System", "The game has been reset.");
+		_gameState.getChatLog().addChat(SYSTEM, "The game has been reset.");
 		_gameState.setTableCards(null);
 		_gameState.setPlayer(null);
 		_gameState.setCard(null);
@@ -162,14 +165,27 @@ public class DixitServer {
 	}
 	
 	private void endGame() {
+		System.out.println("Game over");
 		Collections.sort(_playerList, new Comparator<Player>() {
 			@Override
 			public int compare(Player p1, Player p2) {
 				return p2.getScore() - p1.getScore();
 			}
 		});
-		_gameState.setPlayer(_playerList.get(0).getName());
+		int highscore = _playerList.get(0).getScore();
+		String winner = _playerList.get(0).getName();
+		for(int i = 1; i < _playerList.size(); i++) {
+			Player p = _playerList.get(i);
+			if(p.getScore() == highscore) {
+				winner += " and " + p.getName();
+			}
+		}
+		
+		transferPlayersToGamestate();
+		_gameState.getChatLog().addChat(SYSTEM, "Game over!");
+		_gameState.setPlayer(winner);
 		_gameState.setStatus(Status.GAME_END);
+		_gameState.update();
 	}
 	
 	private void startTurn() {
@@ -273,6 +289,16 @@ public class DixitServer {
 			
 			_storyTeller++;
 			_storyTeller %= _playerMap.size(); //wrap around
+			
+			if(_scoreLimit > 0) {
+				for(Player p : _playerList) {
+					if(p.getScore() >= _scoreLimit) {
+						endGame();
+						return true;
+					}
+				}
+			}
+			
 			if(dealCards()) {
 				startTurn();
 			}
@@ -298,14 +324,12 @@ public class DixitServer {
 		}
 		else {
 			_playerList.get(_storyTeller).addScore(3);
-			
 			for(Card c : _tableCards) {
 				if(c == _storyCard) {
 					for(Player p : c.getVoters()) {
 						p.addScore(3);
 					}
 				}
-				
 				int numVoters = c.getVoters().size();
 				c.getOwner().addScore(numVoters);
 			}
@@ -318,13 +342,14 @@ public class DixitServer {
 	
 	private void playerExit(String player) {
 		System.out.println(player + " exiting");
-		if(_gameState.getStatus() == Status.LOBBY) {
+		final Status status = _gameState.getStatus();
+		if(status == Status.LOBBY) {
 			removePlayer(player, false);
 		}
-		else if(_gameState.getStatus() == Status.AWAITING_STORY) {
+		else if(status == Status.AWAITING_STORY) {
 			removePlayer(player, player.equals(getStoryTeller()));
 		}
-		else if(_gameState.getStatus() == Status.CARD_SUBMISSION) {
+		else if(status == Status.CARD_SUBMISSION) {
 			if(player.equals(getStoryTeller())) {
 				removePlayer(player, true);
 			}
@@ -341,17 +366,20 @@ public class DixitServer {
 				}
 			}
 		}
-		else if(_gameState.getStatus() == Status.CARD_VOTE) {
+		else if(status == Status.CARD_VOTE) {
 			removePlayer(player, true);
 		}
-		if(_gameState.getStatus() != Status.LOBBY && _playerList.size() < MIN_PLAYERS) {
+		else if(status == Status.GAME_END) {
+			removePlayer(player, false);
+		}
+		if(status != Status.LOBBY && _playerList.size() < MIN_PLAYERS) {
 			_gameState.getChatLog().addChat("System", "Not enough players to continue the game");
 			resetGame();
 		}
 	}
 	
 	private void removePlayer(String player, boolean resetRound) {
-		String storyTeller = getStoryTeller();
+		String storyTeller = _gameState.getStatus() == Status.LOBBY ? "" : getStoryTeller();
 		_playerList.remove(_playerMap.get(player));
 		_playerMap.remove(player);
 		_infoWindow.refreshPlayerPanel();
@@ -364,7 +392,7 @@ public class DixitServer {
 			dealCards();
 			_gameState.setStatus(Status.AWAITING_STORY);
 		}
-		if(storyTeller.equals(player) && _playerList.size() >= MIN_PLAYERS) {
+		if(_playerList.size() >= MIN_PLAYERS && storyTeller.equals(player)) {
 			_storyTeller %= _playerMap.size(); //wrap around
 		}
 		else {
@@ -486,6 +514,7 @@ public class DixitServer {
 		
 		private final JPanel _playerPanel;
 		private final JButton _startButton;
+		private final JRadioButton _cardEnd, _pointLimit;
 		
 		public InfoWindow(String ipAddress) {
 			super();
@@ -499,6 +528,28 @@ public class DixitServer {
 			_playerPanel = new JPanel(new GridLayout(0, 1));
 			_playerPanel.setBorder(BorderFactory.createTitledBorder("Players:"));
 			_playerPanel.add(noneLabel);
+			
+			
+			_cardEnd = new JRadioButton("Cards run out", true);
+			_cardEnd.addActionListener(new ActionListener() {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					_scoreLimit = 0;
+					_pointLimit.setText("Point limit");
+				}
+			});
+			_pointLimit = new JRadioButton("Point limit", false);
+			_pointLimit.addActionListener(new ActionListener() {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					getPointLimit();
+				}
+			});
+			
+			final JPanel settingsPanel = new JPanel(new GridLayout(2, 1));
+			settingsPanel.setBorder(BorderFactory.createTitledBorder("End Condition:"));
+			settingsPanel.add(_cardEnd);
+			settingsPanel.add(_pointLimit);
 			
 			_startButton = new JButton("Start Game");
 			_startButton.addActionListener(new ActionListener() {
@@ -514,17 +565,29 @@ public class DixitServer {
 				@Override
 				public void actionPerformed(ActionEvent e) {
 					resetGame();
-					_startButton.setEnabled(true);
+					if(_playerList.size() >= MIN_PLAYERS) {
+						_startButton.setEnabled(true);
+					}
 				}
 			});
+			
+			ButtonGroup endCondition = new ButtonGroup();
+			endCondition.add(_cardEnd);
+			endCondition.add(_pointLimit);
+			
 			final JPanel buttonPanel = new JPanel(new GridLayout(2, 1));
 			buttonPanel.add(_startButton);
 			buttonPanel.add(resetButton);
 			
+			final JPanel optionsPanel = new JPanel(new BorderLayout());
+			optionsPanel.add(settingsPanel, BorderLayout.CENTER);
+			optionsPanel.add(buttonPanel, BorderLayout.SOUTH);
+			
+			
 			JPanel serverPanel = new JPanel(new BorderLayout());
 			serverPanel.add(ipPanel, BorderLayout.NORTH);
 			serverPanel.add(_playerPanel, BorderLayout.CENTER);
-			serverPanel.add(buttonPanel, BorderLayout.SOUTH);
+			serverPanel.add(optionsPanel, BorderLayout.SOUTH);
 			
 			JLabel titleLabel = new JLabel(" JDixit ");
 			titleLabel.setFont(new Font("Harrington", Font.BOLD, 48));
@@ -539,6 +602,23 @@ public class DixitServer {
 			setDefaultCloseOperation(EXIT_ON_CLOSE);
 			setResizable(false);
 			setVisible(true);
+		}
+		
+		private void getPointLimit() {
+			String limitString = (String)JOptionPane.showInputDialog(this, "Input point limit:", "Point Limit", JOptionPane.PLAIN_MESSAGE, null, null, "");
+			if(limitString == null) {
+				_cardEnd.setSelected(true);
+			}
+			else {
+				try {
+					_scoreLimit = Integer.parseInt(limitString);
+					_pointLimit.setText("Point limit: " + _scoreLimit);
+				}
+				catch(NumberFormatException e) {
+					JOptionPane.showMessageDialog(this, "Unrecognized input\nPlease input a positive integer");
+					_cardEnd.setSelected(true);
+				}
+			}
 		}
 		
 		public void refreshPlayerPanel() {

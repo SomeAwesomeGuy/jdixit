@@ -17,7 +17,6 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CountDownLatch;
@@ -166,6 +165,7 @@ public class DixitClient {
 		if(status != _latestStatus) {			
 			_game.setStatus(message);
 			_latestStatus = status;
+			_game.toFront();
 			
 			if(status == Status.LOBBY) {
 				_game.clearCards();
@@ -193,7 +193,11 @@ public class DixitClient {
 				getCards(message);
 			}
 			else if(status == Status.GAME_END) {
-				
+				ArrayList<Card> cards = message.getTableCards();
+				if(cards != null) {
+					_game.updateTableCards(cards);
+				}
+				JOptionPane.showMessageDialog(_game, "Game Over!");
 			}
 		}
 	}
