@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
@@ -42,6 +44,8 @@ public class DixitServer {
 	private static final int MAX_PLAYERS = 8;
 	private static final int HAND_SIZE = 6;
 	private static final String SYSTEM = "System";
+	
+	public static final int CHECKIN = 5;
 	
 	private InfoWindow _infoWindow;
 	
@@ -91,6 +95,18 @@ public class DixitServer {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+		new Timer().schedule(new DisconnectListener(), 0, 1000);
+	}
+	
+	private synchronized void checkIn(Message message) {
+		if(message.getType() == Type.REGISTER) {
+			return;
+		}
+		final Player player = _playerMap.get(message.getPlayer());
+		if(player != null) {
+			player.checkIn();
+		}
 	}
 	
 	private synchronized String registerPlayer(String name, ClientConnection connection) {
@@ -110,8 +126,8 @@ public class DixitServer {
 	}
 	
 	private void transferPlayersToGamestate() {
-		ArrayList<Player> players = new ArrayList<Player>();
-		for(Player p : _playerList) {
+		final ArrayList<Player> players = new ArrayList<Player>();
+		for(final Player p : _playerList) {
 			players.add((Player)p.clone());
 		}
 		_gameState.setPlayers(players);
@@ -128,7 +144,7 @@ public class DixitServer {
 	private void resetGame() {
 		_cardHandler.resetDeck();
 		
-		for(Player p : _playerList) {
+		for(final Player p : _playerList) {
 			p.gameReset();
 		}
 		
@@ -143,7 +159,7 @@ public class DixitServer {
 	
 	private boolean dealCards() {
 		if(_gameState.getStatus() == Status.LOBBY) {
-			for(Player p : _playerList) {
+			for(final Player p : _playerList) {
 				p.setHand(_cardHandler.dealHand(HAND_SIZE));
 			}
 		}
@@ -172,7 +188,7 @@ public class DixitServer {
 				return p2.getScore() - p1.getScore();
 			}
 		});
-		int highscore = _playerList.get(0).getScore();
+		final int highscore = _playerList.get(0).getScore();
 		String winner = _playerList.get(0).getName();
 		for(int i = 1; i < _playerList.size(); i++) {
 			Player p = _playerList.get(i);
@@ -268,7 +284,7 @@ public class DixitServer {
 		if(player.getVotedCard() == null) {
 			_playersLeft--;
 		}
-		for(Card c : _tableCards) {
+		for(final Card c : _tableCards) {
 			if(c.equals(message.getCard())) {
 				player.setVotedCard(c);
 				break;
@@ -277,12 +293,11 @@ public class DixitServer {
 		
 		if(_playersLeft == 0) {
 			
-			for(Player p : _playerList) {
+			for(final Player p : _playerList) {
 				if(p.getName().equals(getStoryTeller())) {
 					continue;
 				}
-				Card voted = p.getVotedCard();
-				voted.addVoter(p);
+				p.getVotedCard().addVoter(p);
 			}
 			
 			score();
@@ -421,6 +436,7 @@ public class DixitServer {
 				final ObjectInputStream objectIn = new ObjectInputStream(_socket.getInputStream());
 				
 				final Message message = (Message)objectIn.readObject();
+				checkIn(message);
 				final Type type = message.getType();
 				if(type == Type.REGISTER) {
 					final Message returnMessage = new Message(Type.FAIL);
@@ -490,10 +506,9 @@ public class DixitServer {
 	private class ClientHandler extends Thread {
 		@Override
 		public void run() {
-			while(true) {	//TODO: Change?
+			while(true) {
 				try {
 					final Socket socket = _serverSocket.accept();
-//					System.out.println("Client connected from " + socket.getRemoteSocketAddress());
 					new ClientConnection(socket).start();
 				} 
 				catch (SocketException e) {
@@ -501,13 +516,23 @@ public class DixitServer {
 				}
 				catch (IOException e) {
 					System.out.println("Error: socket problem");
-//					e.printStackTrace();
 				}
 			}
 		}
 	}
 	
-	
+	private class DisconnectListener extends TimerTask {
+		@Override
+		public void run() {
+			final ArrayList<Player> list = new ArrayList<Player>();
+			list.addAll(_playerList);
+			for(Player p : list) {
+				if(p.check()) {
+					playerExit(p.getName());
+				}
+			}
+		}
+	}
 	
 	private class InfoWindow extends JFrame {
 		private static final long serialVersionUID = -4848838839984637433L;

@@ -37,6 +37,7 @@ import message.Message.Type;
 public class DixitClient {	
 	private static final int PORT = 34948;
 	private static final int FRQ = 1000;
+	private static final int TIMEOUT = 1500;
 	
 	private static DixitClient _instance;
 	
@@ -84,8 +85,8 @@ public class DixitClient {
 		labelPanel.add(ipLabel);
 		labelPanel.add(nameLabel);
 		
-		final JTextField ipField = new JTextField("localhost", 15); //TODO: fix this for release
-		final JTextField nameField = new JTextField("Player " + (int)(Math.random() * 1000), 15);	//TODO: fix this for release
+		final JTextField ipField = new JTextField(15);
+		final JTextField nameField = new JTextField(15);
 		final JPanel fieldPanel = new JPanel(new GridLayout(0, 1));
 		fieldPanel.add(ipField);
 		fieldPanel.add(nameField);
@@ -357,7 +358,7 @@ public class DixitClient {
 		
 		private void sendMessage() {
 			try {
-				connect(500);
+				connect(TIMEOUT);
 				_objectOut.writeObject(_message);
 				_objectOut.flush();
 				
@@ -377,7 +378,7 @@ public class DixitClient {
 		
 		private void getCard() {
 			try {
-				connect(500);
+				connect(TIMEOUT);
 				_objectOut.writeObject(_message);
 				_objectOut.flush();
 				BufferedImage image = ImageIO.read(_socket.getInputStream());
@@ -394,7 +395,7 @@ public class DixitClient {
 			try {
 				_message.setMessageID(_latestUpdateMessageID);
 				
-				connect(500);
+				connect(TIMEOUT);
 				_objectOut.writeObject(_message);
 				_objectOut.flush();
 				
@@ -448,7 +449,7 @@ public class DixitClient {
 	private class ShutDownThread extends Thread {
 		@Override
 		public void run() {
-			new ConnectionHandler(Type.EXIT).start();
+//			new ConnectionHandler(Type.EXIT).start();
 		}
 	}
 	

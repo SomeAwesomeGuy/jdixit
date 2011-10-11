@@ -3,17 +3,31 @@ package message;
 import java.io.Serializable;
 import java.util.ArrayList;
 
+import server.DixitServer;
+
 public class Player implements Serializable {
 	private static final long serialVersionUID = -7629369161724304390L;
 	
 	private String _name;
-	private int _score;
+	private int _score, _timeLeft;
 	private Card _submittedCard, _votedCard;
 	private ArrayList<Card> _hand;
 	
 	public Player(String name) {
 		_name = name;
 		gameReset();
+		checkIn();
+	}
+	
+	public void checkIn() {
+		_timeLeft = DixitServer.CHECKIN;
+	}
+	
+	public boolean check() {
+		if(--_timeLeft == 0) {
+			return true;
+		}
+		return false;
 	}
 	
 	public void gameReset() {

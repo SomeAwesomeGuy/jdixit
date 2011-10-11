@@ -57,7 +57,6 @@ public class CardHandler {
 				_deck.add(card);
 			} catch (IOException e) {
 				System.err.println("Error: Could not load image at " + f.getName());
-//				e.printStackTrace();
 			}
 			
 		}
