@@ -449,7 +449,7 @@ public class DixitClient {
 	private class ShutDownThread extends Thread {
 		@Override
 		public void run() {
-//			new ConnectionHandler(Type.EXIT).start();
+			new ConnectionHandler(Type.EXIT).start();
 		}
 	}
 	
